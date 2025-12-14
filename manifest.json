@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Auto-Liker",
+  "version": "1.0.0",
+  "description": "Automatically likes YouTube videos after watching 40% of the content",
+  "permissions": [],
+  "host_permissions": [
+    "https://www.youtube.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/watch*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
