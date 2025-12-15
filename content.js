@@ -1,153 +1,111 @@
 (function() {
   'use strict';
+  const CONFIG = {
+    LIKE_THRESHOLD: 0.30, // 30% watch progress
+    SELECTOR_VIDEO: 'video',
+    SELECTOR_LIKE_BUTTON: 'like-button-view-model button[aria-label], ytd-toggle-button-renderer button[aria-label*="like" i]',
+    POLL_INTERVAL: 1000,
+    MAX_RETRIES: 10
+  };
+
   let state = {
     videoElement: null,
     hasLiked: false,
-    lastUrl: null,
-    timeUpdateHandler: null
+    currentVideoId: null,
+    observer: null
   };
 
-  const CONFIG = {
-    LIKE_THRESHOLD: 0.40, // 40% watch progress
-    SELECTOR_VIDEO: 'video',
-    SELECTOR_LIKE_BUTTON: 'like-button-view-model button[aria-label], ytd-toggle-button-renderer button[aria-label*="like" i]',
-    DEBOUNCE_MS: 500
-  };
+  function getVideoId() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('v');
+  }
 
   function findVideoElement() {
-    const videos = document.querySelectorAll(CONFIG.SELECTOR_VIDEO);
-    for (const video of videos) {
-      if (video.duration && video.duration > 0) {
-        return video;
-      }
-    }
-    return null;
+    return document.querySelector(CONFIG.SELECTOR_VIDEO);
   }
 
   function findLikeButton() {
     const buttons = document.querySelectorAll(CONFIG.SELECTOR_LIKE_BUTTON);
-    
     for (const button of buttons) {
       const ariaLabel = button.getAttribute('aria-label');
-      if (ariaLabel && ariaLabel.toLowerCase().includes('like')) {
-        if (!ariaLabel.toLowerCase().includes('dislike')) {
-          return button;
-        }
+      if (ariaLabel && ariaLabel.toLowerCase().includes('like') && !ariaLabel.toLowerCase().includes('dislike')) {
+        return button;
       }
     }
     return null;
   }
 
-  function isVideoLiked(likeButton) {
-    if (!likeButton) return false;
-    const ariaPressed = likeButton.getAttribute('aria-pressed');
-    return ariaPressed === 'true';
-  }
-
-  function likeVideo() {
+  function attemptLike() {
+    if (state.hasLiked) return;
     const likeButton = findLikeButton();
-    
-    if (!likeButton) {
-      return { success: false, alreadyLiked: false };
-    }
-
-    if (isVideoLiked(likeButton)) {
-      return { success: true, alreadyLiked: true };
+    if (!likeButton) return;
+    const ariaPressed = likeButton.getAttribute('aria-pressed');
+    if (ariaPressed === 'true') {
+      state.hasLiked = true;
+      return;
     }
 
     likeButton.click();
-    return { success: true, alreadyLiked: false };
+    state.hasLiked = true;
   }
 
-  function onTimeUpdate() {
+  function handleTimeUpdate() {
     const video = state.videoElement;
-    if (!video || !video.duration) return;
+    if (!video || !video.duration || isNaN(video.duration)) return;
 
-    const currentTime = video.currentTime;
-    const duration = video.duration;
-    const watchPercentage = currentTime / duration;
-
-    if (!state.hasLiked && watchPercentage >= CONFIG.LIKE_THRESHOLD) {
-      const result = likeVideo();
-      if (result.success) {
-        state.hasLiked = true;
-        if (!result.alreadyLiked) {
-          console.log('[YouTube Auto-Liker] Video liked');
-        }
-        cleanupVideoListeners();
-      }
+    const progress = video.currentTime / video.duration;
+    if (progress >= CONFIG.LIKE_THRESHOLD && !state.hasLiked) {
+      attemptLike();
     }
   }
 
-  function cleanupVideoListeners() {
-    if (state.videoElement && state.timeUpdateHandler) {
-      state.videoElement.removeEventListener('timeupdate', state.timeUpdateHandler);
+  function resetState() {
+    if (state.videoElement) {
+      state.videoElement.removeEventListener('timeupdate', handleTimeUpdate);
     }
-    state.timeUpdateHandler = null;
+    state.videoElement = null;
+    state.hasLiked = false;
+    state.currentVideoId = getVideoId();
   }
 
-  function attachVideoListeners(video) {
-    cleanupVideoListeners();
-
-    let debounceTimer = null;
-    state.timeUpdateHandler = function() {
-      if (debounceTimer) return;
-      debounceTimer = setTimeout(() => {
-        onTimeUpdate();
-        debounceTimer = null;
-      }, CONFIG.DEBOUNCE_MS);
-    };
-
-    video.addEventListener('timeupdate', state.timeUpdateHandler);
-  }
-
-  function initializeForVideo() {
+  function initializeVideoLogic() {
     const video = findVideoElement();
-    if (!video) return;
+    const videoId = getVideoId();
 
-    const currentUrl = window.location.href;
-    const isNewVideo = video !== state.videoElement || currentUrl !== state.lastUrl;
+    if (!video) {
+        return; 
+    }
 
-    if (isNewVideo) {
+    if (state.videoElement !== video || state.currentVideoId !== videoId) {
+      resetState();
       state.videoElement = video;
-      state.hasLiked = false;
-      state.lastUrl = currentUrl;
-      attachVideoListeners(video);
+      state.currentVideoId = videoId;
+      
+      state.videoElement.addEventListener('timeupdate', handleTimeUpdate);
+      handleTimeUpdate();
     }
   }
 
-  function observeUrlChanges() {
-    let lastUrl = window.location.href;
-    
-    const observer = new MutationObserver(() => {
-      const currentUrl = window.location.href;
-      if (currentUrl !== lastUrl) {
-        lastUrl = currentUrl;
-        setTimeout(initializeForVideo, 1000);
-      }
+  function startNavigationObserver() {
+    document.addEventListener('yt-navigate-finish', () => {
+      setTimeout(initializeVideoLogic, 1000); 
     });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  function init() {
-    initializeForVideo();
-    observeUrlChanges();
-    
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
-        setTimeout(initializeForVideo, 500);
-      }
-    });
+    setInterval(() => {
+        const video = findVideoElement();
+        if (video && video !== state.videoElement) {
+            initializeVideoLogic();
+        } else if (getVideoId() !== state.currentVideoId) {
+             initializeVideoLogic();
+        }
+    }, CONFIG.POLL_INTERVAL);
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', startNavigationObserver);
   } else {
-    init();
+    startNavigationObserver();
   }
+  
+  setTimeout(initializeVideoLogic, 1000);
 
 })();
