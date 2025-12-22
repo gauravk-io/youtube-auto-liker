@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "YouTube Auto-Liker",
   "version": "1.0.0",
-  "description": "Automatically likes YouTube videos after watching 40% of the content",
-  "permissions": [],
+  "description": "Automatically likes YouTube videos after watching 90% of the content",
+  "permissions": ["storage"],
   "host_permissions": [
     "https://www.youtube.com/*"
   ],
