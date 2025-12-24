@@ -3,7 +3,7 @@
   const CONFIG = {
     LIKE_THRESHOLD: 0.90,
     COMMENT_THRESHOLD: 0.90,
-    DEFAULT_COMMENT: "Automated comment. I built an extension so creators still get support even when I forget to comment and like. source code - https://github.com/gauravk-io/youtube-auto-liker",
+    DEFAULT_COMMENT: "Automated comment. I built an extension so creators still get support even when I forget to like and comment.",
     SELECTOR_VIDEO: 'video',
     SELECTOR_LIKE_BUTTON: 'like-button-view-model button[aria-label], ytd-toggle-button-renderer button[aria-label*="like" i]',
     SELECTOR_COMMENT_PLACEHOLDER: '#simplebox-placeholder',
